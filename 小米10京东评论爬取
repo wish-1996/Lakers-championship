@@ -1,0 +1,53 @@
+import asyncio
+import aiohttp
+import re
+import logging
+import datetime
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s: %(message)s')
+# start = datetime.datetime.now()#花费时间测试
+class Crawl(object):
+    def __init__(self):
+        self.semaphore = asyncio.Semaphore(5)#设置的并发数量
+        #设置伪装请求头
+        self.header = {
+            "Host": "club.jd.com",
+            "Cookie": "77UB4HMO5SM; JSESSIONID=A5BB3D504CB6D0005859DC1F14ED58EA.s1; jwotest_product=99; shshshsID=75da3285ab216abd1e4b4a691748e423_3_1602399820982; __jdb=122270672.10.16023995634611649098693|1.1602399563",
+            "Connection": "keep-alive",
+            "Referer": "https://item.jd.com/",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36"
+        }
+    async def scrape(self, url):#定义一个通用的爬取方法
+        async with self.semaphore:
+            session = aiohttp.ClientSession(headers=self.header)
+            response = await session.get(url)
+            result = await response.text()
+            await session.close()
+            return result
+
+    async def scrape_page(self, page):#定义一个列表页的爬取方法
+        url = f'https://club.jd.com/comment/productPageComments.action?callback=fetchJSON_comment98&productId=100011199522&score=0&sortType=5&page={page}&pageSize=10&isShadowSku=0&fold=1'
+        text = await self.scrape(url)
+        await self.parse(text)
+
+    async def parse(self, text):#解析列表页
+        contents = re.findall('"guid":".*?","content":"(.*?)"', text)
+        # contents = re.findall('"guid":".*?","content":"(.*?)","creationTime":".*?","isDelete":".*?","isTop":".*?","userImageUrl":".*?","topped":".*?","score":".*?","imageStatus":".*?"', text)
+        #可以根据要求自行进行正则匹配
+        with open('xiaomi10.txt', 'a+') as f:
+            for content in contents:
+                f.write(content + '\n')
+                logging.info(content)
+
+    def main(self):
+        # 爬取150页的数据
+        scrape_index_tasks = [asyncio.ensure_future(self.scrape_page(page)) for page in range(0, 150)]
+        loop = asyncio.get_event_loop()
+        tasks = asyncio.gather(*scrape_index_tasks)
+        loop.run_until_complete(tasks)
+
+if __name__ == '__main__':
+    spider = Crawl()
+    spider.main()
+    # Costtime = (datetime.datetime.now() - start).total_seconds()
+    # print("用时：{:.3f}s".format(Costtime))
